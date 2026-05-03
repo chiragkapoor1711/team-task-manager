@@ -46,7 +46,10 @@ class Task(db.Model):
 # ================= FRONTEND =================
 @app.route("/")
 def home():
-    return send_file("index.html")
+    try:
+        return send_file("index.html")
+    except:
+        return {"message": "API running but frontend not found"}
 
 # ================= DB INIT =================
 @app.route("/init-db")
