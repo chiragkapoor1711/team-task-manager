@@ -1,11 +1,10 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, render_template
 from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime, date
+from datetime import date
 import os
-from flask import render_template
 
 app = Flask(__name__)
 CORS(app)
@@ -13,7 +12,6 @@ CORS(app)
 # ================= CONFIG =================
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
-# Railway fix for postgres URL
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://")
 
@@ -44,6 +42,7 @@ class Task(db.Model):
     description = db.Column(db.String(300))
     project_id = db.Column(db.Integer)
     assigned_to = db.Column(db.Integer)
+    assigned_by = db.Column(db.Integer)   # ✅ FIX ADDED
     status = db.Column(db.String(20), default="Pending")
     due_date = db.Column(db.String(20))
 
@@ -56,7 +55,7 @@ def home():
 @app.route("/init-db")
 def init_db():
     db.create_all()
-    return {"message": "Tables created"}
+    return {"message": "Tables created successfully"}
 
 # ================= AUTH =================
 @app.route("/signup", methods=["POST"])
@@ -69,10 +68,10 @@ def signup():
     role = data.get("role", "Member")
 
     if not name or not email or not password:
-        return {"error": "Missing fields"}, 400
+        return {"error": "Missing required fields"}, 400
 
     if User.query.filter_by(email=email).first():
-        return {"error": "User exists"}, 400
+        return {"error": "User already exists"}, 400
 
     user = User(
         name=name,
@@ -84,66 +83,130 @@ def signup():
     db.session.add(user)
     db.session.commit()
 
-    return {"message": "User created"}
+    return {"message": "User created successfully"}
 
 @app.route("/login", methods=["POST"])
 def login():
     data = request.get_json()
 
-    user = User.query.filter_by(email=data["email"]).first()
+    user = User.query.filter_by(email=data.get("email")).first()
 
-    if not user or not check_password_hash(user.password, data["password"]):
+    if not user or not check_password_hash(user.password, data.get("password")):
         return {"error": "Invalid credentials"}, 401
 
     token = create_access_token(identity=str(user.id))
 
-    return {"token": token, "role": user.role}
+    return {
+        "token": token,
+        "id": user.id,
+        "name": user.name,
+        "role": user.role
+    }
 
 # ================= PROJECT =================
 @app.route("/projects", methods=["POST"])
 @jwt_required()
 def create_project():
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     data = request.get_json()
 
-    project = Project(name=data["name"], created_by=user_id)
+    project = Project(
+        name=data.get("name"),
+        description=data.get("description", ""),
+        created_by=user_id
+    )
 
     db.session.add(project)
     db.session.commit()
 
-    return {"message": "Project created"}
+    return {"message": "Project created successfully"}
 
 @app.route("/projects", methods=["GET"])
 @jwt_required()
 def get_projects():
     projects = Project.query.all()
+    result = []
 
-    return [{"id": p.id, "name": p.name} for p in projects]
+    for p in projects:
+        creator = User.query.get(p.created_by)
+        task_count = Task.query.filter_by(project_id=p.id).count()
+
+        result.append({
+            "id": p.id,
+            "name": p.name,
+            "description": p.description or "",
+            "task_count": task_count,
+            "creator_name": creator.name if creator else "Unknown"
+        })
+
+    return result
+
+@app.route("/projects/<int:id>", methods=["DELETE"])
+@jwt_required()
+def delete_project(id):
+    Task.query.filter_by(project_id=id).delete()
+
+    project = Project.query.get(id)
+    if not project:
+        return {"error": "Project not found"}, 404
+
+    db.session.delete(project)
+    db.session.commit()
+
+    return {"message": "Project deleted"}
 
 # ================= TASK =================
 @app.route("/tasks", methods=["POST"])
 @jwt_required()
 def create_task():
     data = request.get_json()
+    user_id = int(get_jwt_identity())
 
     task = Task(
-        title=data["title"],
-        project_id=data["project_id"],
-        assigned_to=data["assigned_to"],
-        status="Pending"
+        title=data.get("title"),
+        description=data.get("description", ""),
+        project_id=data.get("project_id"),
+        assigned_to=data.get("assigned_to"),
+        assigned_by=user_id,   # ✅ FIX
+        status="Pending",
+        due_date=data.get("due_date")
     )
 
     db.session.add(task)
     db.session.commit()
 
-    return {"message": "Task created"}
+    return {"message": "Task created successfully"}
 
 @app.route("/tasks", methods=["GET"])
 @jwt_required()
 def get_tasks():
     tasks = Task.query.all()
+    today = str(date.today())
+    result = []
 
-    return [{"id": t.id, "title": t.title, "status": t.status} for t in tasks]
+    for t in tasks:
+        assignee = User.query.get(t.assigned_to) if t.assigned_to else None
+        assigner = User.query.get(t.assigned_by) if t.assigned_by else None
+        project = Project.query.get(t.project_id) if t.project_id else None
+
+        is_overdue = bool(t.due_date and t.due_date < today and t.status != "Done")
+
+        result.append({
+            "id": t.id,
+            "title": t.title,
+            "description": t.description or "",
+            "status": t.status,
+            "due_date": t.due_date,
+            "project_id": t.project_id,
+            "project_name": project.name if project else "—",
+            "assigned_to": t.assigned_to,
+            "assignee_name": assignee.name if assignee else "Unassigned",
+            "assigned_by": t.assigned_by,
+            "assigned_by_name": assigner.name if assigner else "Unknown",  # ✅ FIX
+            "is_overdue": is_overdue
+        })
+
+    return result
 
 @app.route("/tasks/<int:id>", methods=["PUT"])
 @jwt_required()
@@ -151,42 +214,71 @@ def update_task(id):
     data = request.get_json()
 
     task = Task.query.get(id)
-    task.status = data["status"]
+    if not task:
+        return {"error": "Task not found"}, 404
 
+    task.status = data.get("status")
     db.session.commit()
 
-    return {"message": "Task updated"}
-
-@app.route("/users", methods=["GET"])
-@jwt_required()
-def get_users():
-    users = User.query.all()
-    return [{"id": u.id, "name": u.name, "email": u.email, "role": u.role} for u in users]
+    return {"message": "Task updated successfully"}
 
 @app.route("/tasks/<int:id>", methods=["DELETE"])
 @jwt_required()
 def delete_task(id):
     task = Task.query.get(id)
+    if not task:
+        return {"error": "Task not found"}, 404
+
     db.session.delete(task)
     db.session.commit()
-    return {"message": "Deleted"}
 
-@app.route("/projects/<int:id>", methods=["DELETE"])
+    return {"message": "Task deleted"}
+
+# ================= USERS =================
+@app.route("/users", methods=["GET"])
 @jwt_required()
-def delete_project(id):
-    Task.query.filter_by(project_id=id).delete()
-    project = Project.query.get(id)
-    db.session.delete(project)
-    db.session.commit()
-    return {"message": "Deleted"}
-# ================= DASHBOARD =================
+def get_users():
+    users = User.query.all()
+    today = str(date.today())
+    result = []
 
+    for u in users:
+        tasks = Task.query.filter_by(assigned_to=u.id).all()
+        task_list = []
+
+        for t in tasks:
+            project = Project.query.get(t.project_id)
+            assigner = User.query.get(t.assigned_by)
+
+            is_overdue = bool(t.due_date and t.due_date < today and t.status != "Done")
+
+            task_list.append({
+                "id": t.id,
+                "title": t.title,
+                "status": t.status,
+                "due_date": t.due_date,
+                "project_name": project.name if project else "—",
+                "assigned_by_name": assigner.name if assigner else "Unknown",
+                "is_overdue": is_overdue
+            })
+
+        result.append({
+            "id": u.id,
+            "name": u.name,
+            "email": u.email,
+            "role": u.role,
+            "tasks": task_list
+        })
+
+    return result
+
+# ================= DASHBOARD =================
 @app.route("/dashboard", methods=["GET"])
 @jwt_required()
 def dashboard():
-    from datetime import date
     tasks = Task.query.all()
     today = str(date.today())
+
     return {
         "total_tasks": len(tasks),
         "done": len([t for t in tasks if t.status == "Done"]),
