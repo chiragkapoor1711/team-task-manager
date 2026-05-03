@@ -35,14 +35,17 @@ class User(db.Model):
 class Project(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100))
+    description = db.Column(db.String(300))
     created_by = db.Column(db.Integer)
 
 class Task(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(100))
+    description = db.Column(db.String(300))
     project_id = db.Column(db.Integer)
     assigned_to = db.Column(db.Integer)
     status = db.Column(db.String(20), default="Pending")
+    due_date = db.Column(db.String(20))
 
 # ================= FRONTEND =================
 @app.route("/")
@@ -154,20 +157,44 @@ def update_task(id):
 
     return {"message": "Task updated"}
 
+@app.route("/users", methods=["GET"])
+@jwt_required()
+def get_users():
+    users = User.query.all()
+    return [{"id": u.id, "name": u.name, "email": u.email, "role": u.role} for u in users]
+
+@app.route("/tasks/<int:id>", methods=["DELETE"])
+@jwt_required()
+def delete_task(id):
+    task = Task.query.get(id)
+    db.session.delete(task)
+    db.session.commit()
+    return {"message": "Deleted"}
+
+@app.route("/projects/<int:id>", methods=["DELETE"])
+@jwt_required()
+def delete_project(id):
+    Task.query.filter_by(project_id=id).delete()
+    project = Project.query.get(id)
+    db.session.delete(project)
+    db.session.commit()
+    return {"message": "Deleted"}
 # ================= DASHBOARD =================
+
 @app.route("/dashboard", methods=["GET"])
 @jwt_required()
 def dashboard():
+    from datetime import date
     tasks = Task.query.all()
-
-    total = len(tasks)
-    completed = len([t for t in tasks if t.status == "Done"])
-    pending = total - completed
-
+    today = str(date.today())
     return {
-        "total_tasks": total,
-        "completed": completed,
-        "pending": pending
+        "total_tasks": len(tasks),
+        "done": len([t for t in tasks if t.status == "Done"]),
+        "in_progress": len([t for t in tasks if t.status == "In Progress"]),
+        "pending": len([t for t in tasks if t.status == "Pending"]),
+        "overdue": len([t for t in tasks if t.due_date and t.due_date < today and t.status != "Done"]),
+        "projects": Project.query.count(),
+        "members": User.query.count()
     }
 
 # ================= RUN =================
