@@ -5,6 +5,7 @@ from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, date
 import os
+from flask import render_template
 
 app = Flask(__name__)
 CORS(app)
@@ -46,10 +47,7 @@ class Task(db.Model):
 # ================= FRONTEND =================
 @app.route("/")
 def home():
-    try:
-        return send_file("index.html")
-    except:
-        return {"message": "API running but frontend not found"}
+    return render_template("index.html")
 
 # ================= DB INIT =================
 @app.route("/init-db")
