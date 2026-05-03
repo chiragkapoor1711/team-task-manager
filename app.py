@@ -4,6 +4,7 @@ from flask_jwt_extended import JWTManager, create_access_token, jwt_required, ge
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import date
+from sqlalchemy import text
 import os
 
 app = Flask(__name__)
@@ -42,7 +43,7 @@ class Task(db.Model):
     description = db.Column(db.String(300))
     project_id = db.Column(db.Integer)
     assigned_to = db.Column(db.Integer)
-    assigned_by = db.Column(db.Integer)   # ✅ FIX ADDED
+    assigned_by = db.Column(db.Integer)
     status = db.Column(db.String(20), default="Pending")
     due_date = db.Column(db.String(20))
 
@@ -55,13 +56,18 @@ def home():
 @app.route("/init-db")
 def init_db():
     db.create_all()
-    return {"message": "Tables created successfully"}
+    try:
+        with db.engine.connect() as conn:
+            conn.execute(text("ALTER TABLE task ADD COLUMN assigned_by INTEGER"))
+            conn.commit()
+    except Exception:
+        pass  # Column already exists, ignore
+    return {"message": "Database ready"}
 
 # ================= AUTH =================
 @app.route("/signup", methods=["POST"])
 def signup():
     data = request.get_json()
-
     name = data.get("name")
     email = data.get("email")
     password = data.get("password")
@@ -79,28 +85,24 @@ def signup():
         password=generate_password_hash(password),
         role=role
     )
-
     db.session.add(user)
     db.session.commit()
-
     return {"message": "User created successfully"}
 
 @app.route("/login", methods=["POST"])
 def login():
     data = request.get_json()
-
     user = User.query.filter_by(email=data.get("email")).first()
 
     if not user or not check_password_hash(user.password, data.get("password")):
         return {"error": "Invalid credentials"}, 401
 
     token = create_access_token(identity=str(user.id))
-
     return {
         "token": token,
-        "id": user.id,
-        "name": user.name,
-        "role": user.role
+        "id":    user.id,
+        "name":  user.name,
+        "role":  user.role
     }
 
 # ================= PROJECT =================
@@ -109,16 +111,13 @@ def login():
 def create_project():
     user_id = int(get_jwt_identity())
     data = request.get_json()
-
     project = Project(
         name=data.get("name"),
         description=data.get("description", ""),
         created_by=user_id
     )
-
     db.session.add(project)
     db.session.commit()
-
     return {"message": "Project created successfully"}
 
 @app.route("/projects", methods=["GET"])
@@ -126,33 +125,27 @@ def create_project():
 def get_projects():
     projects = Project.query.all()
     result = []
-
     for p in projects:
         creator = User.query.get(p.created_by)
         task_count = Task.query.filter_by(project_id=p.id).count()
-
         result.append({
-            "id": p.id,
-            "name": p.name,
-            "description": p.description or "",
-            "task_count": task_count,
+            "id":           p.id,
+            "name":         p.name,
+            "description":  p.description or "",
+            "task_count":   task_count,
             "creator_name": creator.name if creator else "Unknown"
         })
-
     return result
 
 @app.route("/projects/<int:id>", methods=["DELETE"])
 @jwt_required()
 def delete_project(id):
     Task.query.filter_by(project_id=id).delete()
-
     project = Project.query.get(id)
     if not project:
         return {"error": "Project not found"}, 404
-
     db.session.delete(project)
     db.session.commit()
-
     return {"message": "Project deleted"}
 
 # ================= TASK =================
@@ -161,20 +154,17 @@ def delete_project(id):
 def create_task():
     data = request.get_json()
     user_id = int(get_jwt_identity())
-
     task = Task(
         title=data.get("title"),
         description=data.get("description", ""),
         project_id=data.get("project_id"),
         assigned_to=data.get("assigned_to"),
-        assigned_by=user_id,   # ✅ FIX
+        assigned_by=user_id,
         status="Pending",
         due_date=data.get("due_date")
     )
-
     db.session.add(task)
     db.session.commit()
-
     return {"message": "Task created successfully"}
 
 @app.route("/tasks", methods=["GET"])
@@ -183,43 +173,36 @@ def get_tasks():
     tasks = Task.query.all()
     today = str(date.today())
     result = []
-
     for t in tasks:
-        assignee = User.query.get(t.assigned_to) if t.assigned_to else None
-        assigner = User.query.get(t.assigned_by) if t.assigned_by else None
-        project = Project.query.get(t.project_id) if t.project_id else None
-
+        assignee   = User.query.get(t.assigned_to) if t.assigned_to else None
+        assigner   = User.query.get(t.assigned_by) if t.assigned_by else None
+        project    = Project.query.get(t.project_id) if t.project_id else None
         is_overdue = bool(t.due_date and t.due_date < today and t.status != "Done")
-
         result.append({
-            "id": t.id,
-            "title": t.title,
-            "description": t.description or "",
-            "status": t.status,
-            "due_date": t.due_date,
-            "project_id": t.project_id,
-            "project_name": project.name if project else "—",
-            "assigned_to": t.assigned_to,
-            "assignee_name": assignee.name if assignee else "Unassigned",
-            "assigned_by": t.assigned_by,
-            "assigned_by_name": assigner.name if assigner else "Unknown",  # ✅ FIX
-            "is_overdue": is_overdue
+            "id":               t.id,
+            "title":            t.title,
+            "description":      t.description or "",
+            "status":           t.status,
+            "due_date":         t.due_date,
+            "project_id":       t.project_id,
+            "project_name":     project.name if project else "—",
+            "assigned_to":      t.assigned_to,
+            "assignee_name":    assignee.name if assignee else "Unassigned",
+            "assigned_by":      t.assigned_by,
+            "assigned_by_name": assigner.name if assigner else "—",
+            "is_overdue":       is_overdue
         })
-
     return result
 
 @app.route("/tasks/<int:id>", methods=["PUT"])
 @jwt_required()
 def update_task(id):
     data = request.get_json()
-
     task = Task.query.get(id)
     if not task:
         return {"error": "Task not found"}, 404
-
     task.status = data.get("status")
     db.session.commit()
-
     return {"message": "Task updated successfully"}
 
 @app.route("/tasks/<int:id>", methods=["DELETE"])
@@ -228,10 +211,8 @@ def delete_task(id):
     task = Task.query.get(id)
     if not task:
         return {"error": "Task not found"}, 404
-
     db.session.delete(task)
     db.session.commit()
-
     return {"message": "Task deleted"}
 
 # ================= USERS =================
@@ -241,35 +222,29 @@ def get_users():
     users = User.query.all()
     today = str(date.today())
     result = []
-
     for u in users:
         tasks = Task.query.filter_by(assigned_to=u.id).all()
         task_list = []
-
         for t in tasks:
-            project = Project.query.get(t.project_id)
-            assigner = User.query.get(t.assigned_by)
-
+            project    = Project.query.get(t.project_id) if t.project_id else None
+            assigner   = User.query.get(t.assigned_by) if t.assigned_by else None
             is_overdue = bool(t.due_date and t.due_date < today and t.status != "Done")
-
             task_list.append({
-                "id": t.id,
-                "title": t.title,
-                "status": t.status,
-                "due_date": t.due_date,
-                "project_name": project.name if project else "—",
-                "assigned_by_name": assigner.name if assigner else "Unknown",
-                "is_overdue": is_overdue
+                "id":               t.id,
+                "title":            t.title,
+                "status":           t.status,
+                "due_date":         t.due_date,
+                "project_name":     project.name if project else "—",
+                "assigned_by_name": assigner.name if assigner else "—",
+                "is_overdue":       is_overdue
             })
-
         result.append({
-            "id": u.id,
-            "name": u.name,
+            "id":    u.id,
+            "name":  u.name,
             "email": u.email,
-            "role": u.role,
+            "role":  u.role,
             "tasks": task_list
         })
-
     return result
 
 # ================= DASHBOARD =================
@@ -278,15 +253,14 @@ def get_users():
 def dashboard():
     tasks = Task.query.all()
     today = str(date.today())
-
     return {
         "total_tasks": len(tasks),
-        "done": len([t for t in tasks if t.status == "Done"]),
+        "done":        len([t for t in tasks if t.status == "Done"]),
         "in_progress": len([t for t in tasks if t.status == "In Progress"]),
-        "pending": len([t for t in tasks if t.status == "Pending"]),
-        "overdue": len([t for t in tasks if t.due_date and t.due_date < today and t.status != "Done"]),
-        "projects": Project.query.count(),
-        "members": User.query.count()
+        "pending":     len([t for t in tasks if t.status == "Pending"]),
+        "overdue":     len([t for t in tasks if t.due_date and t.due_date < today and t.status != "Done"]),
+        "projects":    Project.query.count(),
+        "members":     User.query.count()
     }
 
 # ================= RUN =================
@@ -294,4 +268,11 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     with app.app_context():
         db.create_all()
+        # Startup pe column migration
+        try:
+            with db.engine.connect() as conn:
+                conn.execute(text("ALTER TABLE task ADD COLUMN assigned_by INTEGER"))
+                conn.commit()
+        except Exception:
+            pass
     app.run(host="0.0.0.0", port=port)
