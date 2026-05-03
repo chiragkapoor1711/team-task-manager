@@ -5,6 +5,7 @@ from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, date
 import os
+from flask import send_file
 
 app = Flask(__name__)
 CORS(app)
@@ -71,7 +72,13 @@ def task_to_dict(t):
         'created_at': t.created_at.isoformat()
     }
 
+
+@app.route("/")
+def serve_frontend():
+    return send_file("index.html")
+
 # ─── AUTH ROUTES ──────────────────────────────────────────
+
 
 @app.route('/signup', methods=['POST'])
 def signup():
