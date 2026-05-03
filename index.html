@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Team Task Manager</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --border: #2a2a2a;
+    --accent: #f5c518;
+    --accent2: #e05252;
+    --green: #4caf7d;
+    --blue: #4a9eff;
+    --text: #e8e8e8;
+    --muted: #888;
+    --radius: 6px;
+  }
+
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* ── NAVBAR ── */
+  .navbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 28px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .navbar .logo {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 1px;
+  }
+  .navbar .nav-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .nav-badge {
+    font-size: .72rem;
+    background: var(--accent);
+    color: #000;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-weight: 600;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .nav-user { font-size: .85rem; color: var(--muted); }
+
+  /* ── SCREENS ── */
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  /* ── AUTH ── */
+  .auth-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(100vh - 57px);
+    padding: 40px 16px;
+  }
+  .auth-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 40px 36px;
+    width: 100%;
+    max-width: 420px;
+  }
+  .auth-box h2 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 1.3rem;
+    color: var(--accent);
+    margin-bottom: 28px;
+  }
+  .auth-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 28px;
+  }
+  .auth-tab {
+    padding: 10px 20px;
+    cursor: pointer;
+    font-size: .9rem;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    transition: all .2s;
+  }
+  .auth-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  /* ── FORM ELEMENTS ── */
+  .form-group { margin-bottom: 16px; }
+  .form-group label {
+    display: block;
+    font-size: .78rem;
+    color: var(--muted);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  input, select, textarea {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    padding: 10px 14px;
+    font-size: .9rem;
+    font-family: 'IBM Plex Sans', sans-serif;
+    transition: border-color .2s;
+    outline: none;
+  }
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--accent);
+  }
+  select option { background: var(--bg); }
+  textarea { resize: vertical; min-height: 70px; }
+
+  /* ── BUTTONS ── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 20px;
+    border-radius: var(--radius);
+    font-size: .88rem;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    transition: all .2s;
+  }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-primary:hover { background: #ffd640; }
+  .btn-danger { background: var(--accent2); color: #fff; }
+  .btn-danger:hover { background: #c94040; }
+  .btn-ghost {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover { color: var(--text); border-color: var(--text); }
+  .btn-sm { padding: 6px 12px; font-size: .8rem; }
+  .btn-full { width: 100%; justify-content: center; }
+
+  /* ── DASHBOARD LAYOUT ── */
+  .app-layout {
+    display: flex;
+    min-height: calc(100vh - 57px);
+  }
+  .sidebar {
+    width: 220px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 20px 0;
+    flex-shrink: 0;
+  }
+  .sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 22px;
+    cursor: pointer;
+    font-size: .88rem;
+    color: var(--muted);
+    transition: all .15s;
+    border-left: 3px solid transparent;
+  }
+  .sidebar-item:hover { color: var(--text); background: rgba(255,255,255,.03); }
+  .sidebar-item.active {
+    color: var(--accent);
+    border-left-color: var(--accent);
+    background: rgba(245,197,24,.05);
+  }
+  .main-content {
+    flex: 1;
+    padding: 28px 32px;
+    overflow-y: auto;
+  }
+
+  /* ── PAGE HEADER ── */
+  .page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 28px;
+  }
+  .page-header h2 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 1.2rem;
+    color: var(--text);
+  }
+  .page-header p { font-size: .82rem; color: var(--muted); margin-top: 3px; }
+
+  /* ── STATS GRID ── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+  }
+  .stat-card .stat-num {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 2rem;
+    font-weight: 600;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+  .stat-card .stat-label { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  .stat-card.yellow .stat-num { color: var(--accent); }
+  .stat-card.green .stat-num  { color: var(--green); }
+  .stat-card.blue .stat-num   { color: var(--blue); }
+  .stat-card.red .stat-num    { color: var(--accent2); }
+
+  /* ── TABLE ── */
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    background: #111;
+    font-size: .72rem;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    color: var(--muted);
+    padding: 12px 16px;
+    text-align: left;
+    font-family: 'IBM Plex Mono', monospace;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 13px 16px;
+    font-size: .87rem;
+    border-bottom: 1px solid rgba(255,255,255,.04);
+    vertical-align: middle;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+
+  /* ── STATUS BADGE ── */
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: .72rem;
+    font-weight: 600;
+    font-family: 'IBM Plex Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: .3px;
+  }
+  .badge-pending   { background: rgba(245,197,24,.15); color: var(--accent); }
+  .badge-inprog    { background: rgba(74,158,255,.15); color: var(--blue); }
+  .badge-done      { background: rgba(76,175,125,.15); color: var(--green); }
+  .badge-overdue   { background: rgba(224,82,82,.15);  color: var(--accent2); }
+  .badge-admin     { background: rgba(245,197,24,.15); color: var(--accent); }
+  .badge-member    { background: rgba(255,255,255,.08); color: var(--muted); }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.7);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 32px;
+    width: 100%;
+    max-width: 460px;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  .modal h3 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 1.05rem;
+    margin-bottom: 22px;
+    color: var(--accent);
+  }
+  .modal-footer {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 22px;
+  }
+
+  /* ── TOAST ── */
+  .toast-container {
+    position: fixed;
+    bottom: 24px; right: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 999;
+  }
+  .toast {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    color: var(--text);
+    padding: 12px 18px;
+    border-radius: var(--radius);
+    font-size: .85rem;
+    animation: slideIn .25s ease;
+    max-width: 300px;
+  }
+  .toast.error { border-left-color: var(--accent2); }
+  .toast.success { border-left-color: var(--green); }
+  @keyframes slideIn {
+    from { transform: translateX(30px); opacity: 0; }
+    to   { transform: translateX(0);    opacity: 1; }
+  }
+
+  /* ── STATUS SELECT ── */
+  .status-select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    padding: 5px 8px;
+    font-size: .8rem;
+    cursor: pointer;
+  }
+
+  /* ── EMPTY STATE ── */
+  .empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+  }
+  .empty .empty-icon { font-size: 2.5rem; margin-bottom: 12px; }
+  .empty p { font-size: .88rem; }
+
+  /* ── TAB PAGES ── */
+  .tab-page { display: none; }
+  .tab-page.active { display: block; }
+
+  .section-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: .72rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    padding: 14px 22px 6px;
+  }
+
+  .logout-btn {
+    background: transparent;
+    border: 1px solid #333;
+    color: var(--muted);
+    padding: 7px 14px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: .82rem;
+    font-family: 'IBM Plex Sans', sans-serif;
+    transition: all .2s;
+  }
+  .logout-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  .filter-bar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .filter-bar select, .filter-bar input {
+    width: auto;
+    min-width: 140px;
+  }
+</style>
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav class="navbar">
+  <div class="logo">⚡ TASKFLOW</div>
+  <div class="nav-right">
+    <span class="nav-user" id="navUser"></span>
+    <span class="nav-badge" id="navRole" style="display:none"></span>
+    <button class="logout-btn" id="logoutBtn" style="display:none" onclick="logout()">Logout</button>
+  </div>
+</nav>
+
+<!-- ══ AUTH SCREEN ══ -->
+<div id="authScreen" class="screen active">
+  <div class="auth-wrap">
+    <div class="auth-box">
+      <div class="auth-tabs">
+        <div class="auth-tab active" onclick="switchAuthTab('login')">Login</div>
+        <div class="auth-tab" onclick="switchAuthTab('signup')">Signup</div>
+      </div>
+
+      <!-- Login Form -->
+      <div id="loginForm">
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="loginEmail" placeholder="you@email.com">
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="loginPassword" placeholder="••••••••">
+        </div>
+        <button class="btn btn-primary btn-full" onclick="login()">Login →</button>
+      </div>
+
+      <!-- Signup Form -->
+      <div id="signupForm" style="display:none">
+        <div class="form-group">
+          <label>Full Name</label>
+          <input type="text" id="signupName" placeholder="John Doe">
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="signupEmail" placeholder="you@email.com">
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="signupPassword" placeholder="Min 6 chars">
+        </div>
+        <div class="form-group">
+          <label>Role</label>
+          <select id="signupRole">
+            <option value="Member">Member</option>
+            <option value="Admin">Admin</option>
+          </select>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="signup()">Create Account →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ APP SCREEN ══ -->
+<div id="appScreen" class="screen">
+  <div class="app-layout">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="section-label">Menu</div>
+      <div class="sidebar-item active" onclick="showTab('dashboard')">📊 Dashboard</div>
+      <div class="sidebar-item" onclick="showTab('tasks')">✅ Tasks</div>
+      <div class="sidebar-item admin-only" onclick="showTab('projects')">📁 Projects</div>
+      <div class="sidebar-item admin-only" onclick="showTab('members')">👥 Members</div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+
+      <!-- ── DASHBOARD TAB ── -->
+      <div id="tab-dashboard" class="tab-page active">
+        <div class="page-header">
+          <div>
+            <h2>Dashboard</h2>
+            <p id="dashGreet">Welcome back!</p>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="loadDashboard()">↺ Refresh</button>
+        </div>
+        <div class="stats-grid" id="statsGrid"></div>
+
+        <div class="page-header" style="margin-bottom:16px">
+          <h2 style="font-size:1rem">Recent Tasks</h2>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Project</th>
+                <th>Assignee</th>
+                <th>Status</th>
+                <th>Due</th>
+              </tr>
+            </thead>
+            <tbody id="recentTasksBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── TASKS TAB ── -->
+      <div id="tab-tasks" class="tab-page">
+        <div class="page-header">
+          <div><h2>Tasks</h2><p>Manage and track all tasks</p></div>
+          <button class="btn btn-primary btn-sm admin-only" onclick="openModal('taskModal')">+ New Task</button>
+        </div>
+        <div class="filter-bar">
+          <select id="filterStatus" onchange="loadTasks()">
+            <option value="">All Status</option>
+            <option value="Pending">Pending</option>
+            <option value="In Progress">In Progress</option>
+            <option value="Done">Done</option>
+          </select>
+          <select id="filterProject" onchange="loadTasks()">
+            <option value="">All Projects</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Project</th>
+                <th>Assignee</th>
+                <th>Status</th>
+                <th>Due</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="tasksBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── PROJECTS TAB ── -->
+      <div id="tab-projects" class="tab-page">
+        <div class="page-header">
+          <div><h2>Projects</h2><p>All projects in the workspace</p></div>
+          <button class="btn btn-primary btn-sm" onclick="openModal('projectModal')">+ New Project</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Name</th><th>Description</th><th>Tasks</th><th>Created By</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="projectsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── MEMBERS TAB ── -->
+      <div id="tab-members" class="tab-page">
+        <div class="page-header">
+          <div><h2>Members</h2><p>Team members and roles</p></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Name</th><th>Email</th><th>Role</th></tr>
+            </thead>
+            <tbody id="membersBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- ══ MODALS ══ -->
+
+<!-- Project Modal -->
+<div class="modal-overlay" id="projectModal">
+  <div class="modal">
+    <h3>📁 Create Project</h3>
+    <div class="form-group">
+      <label>Project Name</label>
+      <input id="projName" placeholder="e.g. Website Redesign">
+    </div>
+    <div class="form-group">
+      <label>Description</label>
+      <textarea id="projDesc" placeholder="Brief description..."></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('projectModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="createProject()">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Task Modal -->
+<div class="modal-overlay" id="taskModal">
+  <div class="modal">
+    <h3>✅ Create Task</h3>
+    <div class="form-group">
+      <label>Title</label>
+      <input id="taskTitle" placeholder="Task title">
+    </div>
+    <div class="form-group">
+      <label>Description</label>
+      <textarea id="taskDesc" placeholder="What needs to be done?"></textarea>
+    </div>
+    <div class="form-group">
+      <label>Project</label>
+      <select id="taskProject"></select>
+    </div>
+    <div class="form-group">
+      <label>Assign To</label>
+      <select id="taskAssign"><option value="">— Unassigned —</option></select>
+    </div>
+    <div class="form-group">
+      <label>Due Date</label>
+      <input type="date" id="taskDue">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('taskModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="createTask()">Create Task</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+const API = 'http://127.0.0.1:5000';
+let token = '';
+let currentUser = null;
+
+// ─── UTILS ────────────────────────────────────────────────
+
+function toast(msg, type = 'info') {
+  const c = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+function api(path, opts = {}) {
+  return fetch(API + path, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: 'Bearer ' + token } : {})
+    },
+    ...opts
+  }).then(async r => {
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Something went wrong');
+    return data;
+  });
+}
+
+function statusBadge(status, overdue) {
+  if (overdue) return `<span class="badge badge-overdue">Overdue</span>`;
+  const map = { 'Pending': 'badge-pending', 'In Progress': 'badge-inprog', 'Done': 'badge-done' };
+  return `<span class="badge ${map[status] || ''}">${status}</span>`;
+}
+
+function fmtDate(d) {
+  if (!d) return '—';
+  return new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' });
+}
+
+// ─── AUTH TABS ────────────────────────────────────────────
+
+function switchAuthTab(tab) {
+  document.querySelectorAll('.auth-tab').forEach((el, i) => {
+    el.classList.toggle('active', (i === 0) === (tab === 'login'));
+  });
+  document.getElementById('loginForm').style.display  = tab === 'login'  ? 'block' : 'none';
+  document.getElementById('signupForm').style.display = tab === 'signup' ? 'block' : 'none';
+}
+
+// ─── SIGNUP ───────────────────────────────────────────────
+
+async function signup() {
+  const name = document.getElementById('signupName').value.trim();
+  const email = document.getElementById('signupEmail').value.trim();
+  const password = document.getElementById('signupPassword').value;
+  const role = document.getElementById('signupRole').value;
+
+  if (!name || !email || !password) return toast('All fields required', 'error');
+  if (password.length < 6) return toast('Password min 6 chars', 'error');
+
+  try {
+    await api('/signup', { method: 'POST', body: JSON.stringify({ name, email, password, role }) });
+    toast('Account created! Please login.', 'success');
+    switchAuthTab('login');
+    document.getElementById('loginEmail').value = email;
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ─── LOGIN ────────────────────────────────────────────────
+
+async function login() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  if (!email || !password) return toast('Fill all fields', 'error');
+
+  try {
+    const data = await api('/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+    token = data.token;
+    currentUser = { id: data.id, name: data.name, role: data.role };
+
+    // Update navbar
+    document.getElementById('navUser').textContent = data.name;
+    document.getElementById('navRole').textContent = data.role;
+    document.getElementById('navRole').style.display = 'inline';
+    document.getElementById('logoutBtn').style.display = 'inline';
+
+    // Admin-only sidebar items
+    document.querySelectorAll('.admin-only').forEach(el => {
+      el.style.display = data.role === 'Admin' ? 'flex' : 'none';
+    });
+
+    // Switch screen
+    document.getElementById('authScreen').classList.remove('active');
+    document.getElementById('appScreen').classList.add('active');
+
+    showTab('dashboard');
+    toast(`Welcome back, ${data.name}!`, 'success');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ─── LOGOUT ───────────────────────────────────────────────
+
+function logout() {
+  token = '';
+  currentUser = null;
+  document.getElementById('navUser').textContent = '';
+  document.getElementById('navRole').style.display = 'none';
+  document.getElementById('logoutBtn').style.display = 'none';
+  document.getElementById('authScreen').classList.add('active');
+  document.getElementById('appScreen').classList.remove('active');
+  toast('Logged out successfully');
+}
+
+// ─── TABS ─────────────────────────────────────────────────
+
+function showTab(name) {
+  document.querySelectorAll('.tab-page').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+
+  const items = document.querySelectorAll('.sidebar-item');
+  const map = { dashboard: 0, tasks: 1, projects: 2, members: 3 };
+  if (items[map[name]]) items[map[name]].classList.add('active');
+
+  if (name === 'dashboard') loadDashboard();
+  if (name === 'tasks')     loadTasks();
+  if (name === 'projects')  loadProjects();
+  if (name === 'members')   loadMembers();
+}
+
+// ─── MODAL ────────────────────────────────────────────────
+
+function openModal(id) {
+  if (id === 'taskModal') populateTaskModal();
+  document.getElementById(id).classList.add('open');
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+document.querySelectorAll('.modal-overlay').forEach(el => {
+  el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); });
+});
+
+// ─── DASHBOARD ────────────────────────────────────────────
+
+async function loadDashboard() {
+  document.getElementById('dashGreet').textContent =
+    currentUser ? `Welcome back, ${currentUser.name}!` : '';
+
+  try {
+    const d = await api('/dashboard');
+    const tasks = await api('/tasks');
+
+    const isAdmin = currentUser?.role === 'Admin';
+
+    const cards = [
+      { label: 'Total Tasks', num: d.total_tasks, cls: 'yellow' },
+      { label: 'Done', num: d.done, cls: 'green' },
+      { label: 'In Progress', num: d.in_progress, cls: 'blue' },
+      { label: 'Pending', num: d.pending, cls: '' },
+      { label: 'Overdue', num: d.overdue, cls: 'red' },
+      ...(isAdmin ? [
+        { label: 'Projects', num: d.projects, cls: 'blue' },
+        { label: 'Members', num: d.members, cls: '' }
+      ] : [])
+    ];
+
+    document.getElementById('statsGrid').innerHTML = cards.map(c => `
+      <div class="stat-card ${c.cls}">
+        <div class="stat-num">${c.num}</div>
+        <div class="stat-label">${c.label}</div>
+      </div>
+    `).join('');
+
+    const recent = tasks.slice(0, 8);
+    document.getElementById('recentTasksBody').innerHTML = recent.length ? recent.map(t => `
+      <tr>
+        <td>${t.title}</td>
+        <td>${t.project_name}</td>
+        <td>${t.assignee_name}</td>
+        <td>${statusBadge(t.status, t.is_overdue)}</td>
+        <td>${fmtDate(t.due_date)}</td>
+      </tr>
+    `).join('') : `<tr><td colspan="5"><div class="empty"><div class="empty-icon">📭</div><p>No tasks yet</p></div></td></tr>`;
+
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ─── TASKS ────────────────────────────────────────────────
+
+async function loadTasks() {
+  try {
+    let tasks = await api('/tasks');
+    const status = document.getElementById('filterStatus').value;
+    const projId = document.getElementById('filterProject').value;
+
+    if (status) tasks = tasks.filter(t => t.status === status);
+    if (projId) tasks = tasks.filter(t => t.project_id == projId);
+
+    const isAdmin = currentUser?.role === 'Admin';
+
+    document.getElementById('tasksBody').innerHTML = tasks.length ? tasks.map(t => `
+      <tr>
+        <td><b>${t.title}</b><br><span style="color:var(--muted);font-size:.78rem">${t.description || ''}</span></td>
+        <td>${t.project_name}</td>
+        <td>${t.assignee_name}</td>
+        <td>
+          ${isAdmin || t.assigned_to === currentUser?.id
+            ? `<select class="status-select" onchange="updateStatus(${t.id}, this.value)">
+                ${['Pending','In Progress','Done'].map(s =>
+                  `<option ${t.status===s?'selected':''}>${s}</option>`
+                ).join('')}
+               </select>`
+            : statusBadge(t.status, t.is_overdue)
+          }
+        </td>
+        <td>${fmtDate(t.due_date)}</td>
+        <td>
+          ${isAdmin ? `<button class="btn btn-danger btn-sm" onclick="deleteTask(${t.id})">Delete</button>` : ''}
+        </td>
+      </tr>
+    `).join('') : `<tr><td colspan="6"><div class="empty"><div class="empty-icon">✅</div><p>No tasks found</p></div></td></tr>`;
+
+    // populate project filter
+    const projects = await api('/projects');
+    const sel = document.getElementById('filterProject');
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">All Projects</option>' +
+      projects.map(p => `<option value="${p.id}" ${cur==p.id?'selected':''}>${p.name}</option>`).join('');
+
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function updateStatus(id, status) {
+  try {
+    await api(`/tasks/${id}`, { method: 'PUT', body: JSON.stringify({ status }) });
+    toast('Status updated', 'success');
+    loadDashboard();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function deleteTask(id) {
+  if (!confirm('Delete this task?')) return;
+  try {
+    await api(`/tasks/${id}`, { method: 'DELETE' });
+    toast('Task deleted', 'success');
+    loadTasks();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ─── PROJECTS ─────────────────────────────────────────────
+
+async function loadProjects() {
+  try {
+    const projects = await api('/projects');
+    document.getElementById('projectsBody').innerHTML = projects.length ? projects.map(p => `
+      <tr>
+        <td><b>${p.name}</b></td>
+        <td style="color:var(--muted)">${p.description || '—'}</td>
+        <td><span class="badge badge-pending">${p.task_count}</span></td>
+        <td>${p.creator_name}</td>
+        <td><button class="btn btn-danger btn-sm" onclick="deleteProject(${p.id})">Delete</button></td>
+      </tr>
+    `).join('') : `<tr><td colspan="5"><div class="empty"><div class="empty-icon">📁</div><p>No projects yet</p></div></td></tr>`;
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function createProject() {
+  const name = document.getElementById('projName').value.trim();
+  const desc = document.getElementById('projDesc').value.trim();
+  if (!name) return toast('Project name required', 'error');
+  try {
+    await api('/projects', { method: 'POST', body: JSON.stringify({ name, description: desc }) });
+    toast('Project created!', 'success');
+    closeModal('projectModal');
+    document.getElementById('projName').value = '';
+    document.getElementById('projDesc').value = '';
+    loadProjects();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function deleteProject(id) {
+  if (!confirm('Delete project and all its tasks?')) return;
+  try {
+    await api(`/projects/${id}`, { method: 'DELETE' });
+    toast('Project deleted', 'success');
+    loadProjects();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ─── MEMBERS ──────────────────────────────────────────────
+
+async function loadMembers() {
+  try {
+    const users = await api('/users');
+    document.getElementById('membersBody').innerHTML = users.map(u => `
+      <tr>
+        <td><b>${u.name}</b></td>
+        <td style="color:var(--muted)">${u.email}</td>
+        <td><span class="badge ${u.role==='Admin'?'badge-admin':'badge-member'}">${u.role}</span></td>
+      </tr>
+    `).join('');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ─── CREATE TASK ──────────────────────────────────────────
+
+async function populateTaskModal() {
+  try {
+    const [projects, users] = await Promise.all([api('/projects'), api('/users')]);
+    document.getElementById('taskProject').innerHTML =
+      projects.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    document.getElementById('taskAssign').innerHTML =
+      '<option value="">— Unassigned —</option>' +
+      users.map(u => `<option value="${u.id}">${u.name} (${u.role})</option>`).join('');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function createTask() {
+  const title   = document.getElementById('taskTitle').value.trim();
+  const desc    = document.getElementById('taskDesc').value.trim();
+  const projId  = document.getElementById('taskProject').value;
+  const assign  = document.getElementById('taskAssign').value;
+  const due     = document.getElementById('taskDue').value;
+
+  if (!title) return toast('Task title required', 'error');
+  if (!projId) return toast('Select a project', 'error');
+
+  try {
+    await api('/tasks', {
+      method: 'POST',
+      body: JSON.stringify({
+        title, description: desc,
+        project_id: parseInt(projId),
+        assigned_to: assign ? parseInt(assign) : null,
+        due_date: due || null
+      })
+    });
+    toast('Task created!', 'success');
+    closeModal('taskModal');
+    document.getElementById('taskTitle').value = '';
+    document.getElementById('taskDesc').value  = '';
+    document.getElementById('taskDue').value   = '';
+    loadTasks();
+  } catch (e) { toast(e.message, 'error'); }
+}
+</script>
+</body>
+</html>
